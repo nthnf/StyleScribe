@@ -41,7 +41,14 @@ export default function Home() {
       try {
         const response = await fetch(`/api/requests/${requestId}`, { cache: "no-store" });
 
-        if (!response.ok) return;
+        if (!response.ok) {
+          if (response.status === 404) {
+            setError("Request not found. Please try again.");
+            setIsRunning(false);
+          }
+
+          return;
+        }
 
         const data = (await response.json()) as { status?: typeof status; error?: string; progress?: number };
         if (cancelled) return;

@@ -10,7 +10,7 @@ type ResultPageProps = {
 
 export default async function ResultPage({ params }: ResultPageProps) {
   const { requestId } = await params;
-  const state = getRequestState(requestId);
+  const state = await getRequestState(requestId);
 
   if (!state) {
     notFound();

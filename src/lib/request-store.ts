@@ -1,6 +1,7 @@
 import type { DesignPreviewModel } from "./design-preview";
 import { runDesignPipeline } from "./design-engine";
 import { AuthGatedError, CrawlError, UnsafeUrlError } from "./scan/crawl";
+import { Redis } from "@upstash/redis";
 
 export type RequestState = {
   id: string;
@@ -40,9 +41,42 @@ const globalStore = globalThis as typeof globalThis & {
 
 const requests = globalStore.__styleScribeRequests ?? new Map<string, RequestState>();
 globalStore.__styleScribeRequests = requests;
+const requestRedis = process.env.UPSTASH_REDIS_REST_URL && process.env.UPSTASH_REDIS_REST_TOKEN
+  ? Redis.fromEnv()
+  : null;
+const requestKey = (id: string) => `style-scribe:request:${id}`;
+const requestTtlSeconds = 60 * 60 * 24;
 
-export function getRequestState(id: string) {
-  return requests.get(id);
+async function persistRequestState(state: RequestState) {
+  if (!requestRedis) return;
+
+  try {
+    await requestRedis.set(requestKey(state.id), JSON.stringify(state), { ex: requestTtlSeconds });
+  } catch {
+    // best effort; local in-memory store still keeps same-instance requests alive
+  }
+}
+
+async function loadRequestState(id: string) {
+  const cached = requests.get(id);
+  if (cached) return cached;
+
+  if (!requestRedis) return undefined;
+
+  try {
+    const raw = await requestRedis.get<string>(requestKey(id));
+    if (!raw) return undefined;
+
+    const parsed = JSON.parse(raw) as RequestState;
+    requests.set(id, parsed);
+    return parsed;
+  } catch {
+    return undefined;
+  }
+}
+
+export async function getRequestState(id: string) {
+  return loadRequestState(id);
 }
 
 export function updateRequestState(id: string, patch: Partial<RequestState>) {
@@ -56,6 +90,7 @@ export function updateRequestState(id: string, patch: Partial<RequestState>) {
   } satisfies RequestState;
 
   requests.set(id, next);
+  void persistRequestState(next);
 }
 
 export function createRequest(sourceUrl: string) {
@@ -72,6 +107,7 @@ export function createRequest(sourceUrl: string) {
   };
 
   requests.set(id, state);
+  void persistRequestState(state);
 
   return state;
 }
