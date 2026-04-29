@@ -1,0 +1,25 @@
+Ground rules:
+
+- Return only a complete `DESIGN.md` file.
+- Use valid Markdown with YAML front matter first, then the body.
+- Treat the extracted evidence as the source of truth.
+- Do not invent brand claims, intent, or unsupported design details.
+- Prefer the strongest observed brand accent over neutral blacks and grays.
+- Build a color system with 8 to 16 color entries when evidence allows.
+- Never output only neutral colors.
+- Include at least one vivid accent, one dark text color, and one light surface color.
+- Limit neutral colors to the minimum needed for structure.
+- Keep color names conservative and functional.
+- Use `primary`, `secondary`, `tertiary`, `neutral`, `surface`, `on-surface`, and `error` only when they are supported by evidence.
+- If a `brand-accent` is present in the evidence, it should usually become `primary`.
+- Prefer the first non-neutral accent as `primary` when no explicit brand-accent is present.
+- Keep typography, spacing, radii, and components grounded in evidence.
+- Use `px` as the base unit for `fontSize`, `spacing`, `rounded`, and `letterSpacing` tokens.
+- Convert `rem` and `em` values to `px` using `1rem = 16px` and `1em = 16px` unless evidence clearly establishes a different base.
+- Do not mix `rem`, `em`, and `px` in spacing or radius token scales; normalize those scales to `px`.
+- Sort typography tokens from largest `fontSize` to smallest when practical.
+- Sort spacing tokens from smallest value to largest value.
+- Keep spacing token names consistent with their order, such as `xs`, `sm`, `md`, `lg`, `xl`, or numeric scale names.
+- Never copy CSS variable names into `fontFamily`; use concrete family names or stacks from evidence.
+- Omit unsupported sections instead of guessing.
+- Do not add extra explanation or code fences.
