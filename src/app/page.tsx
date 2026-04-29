@@ -36,10 +36,12 @@ export default function Home() {
     if (!requestId || !isRunning) return;
 
     let cancelled = false;
+    let lastUpdatedAt = 0;
 
-    async function pollStatus() {
+    async function pollStatusLoop() {
+      while (!cancelled) {
       try {
-        const response = await fetch(`/api/requests/${requestId}`, { cache: "no-store" });
+        const response = await fetch(`/api/requests/${requestId}?since=${lastUpdatedAt}`, { cache: "no-store" });
 
         if (!response.ok) {
           if (response.status === 404) {
@@ -50,8 +52,10 @@ export default function Home() {
           return;
         }
 
-        const data = (await response.json()) as { status?: typeof status; error?: string };
+        const data = (await response.json()) as { status?: typeof status; error?: string; updatedAt?: number };
         if (cancelled) return;
+
+        lastUpdatedAt = data.updatedAt ?? lastUpdatedAt;
 
         const nextStatus = data.status ?? "idle";
         setStatus(nextStatus);
@@ -72,25 +76,26 @@ export default function Home() {
         if (nextStatus === "done") {
           setIsRunning(false);
           window.location.assign(`/result/${requestId}`);
+          return;
         }
 
         if (nextStatus === "error") {
           setError(data.error ?? "Pipeline failed.");
           setIsRunning(false);
+          return;
         }
       } catch {
-        // ignore transient polling errors
+        await new Promise((resolve) => window.setTimeout(resolve, 1200));
+      }
       }
     }
 
-    void pollStatus();
-    const interval = window.setInterval(pollStatus, 1200);
+    void pollStatusLoop();
 
     return () => {
       cancelled = true;
-      window.clearInterval(interval);
     };
-  }, [requestId, isRunning, status]);
+  }, [requestId, isRunning]);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
