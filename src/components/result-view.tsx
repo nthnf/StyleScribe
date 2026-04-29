@@ -335,7 +335,7 @@ export function ResultView({
                   <div
                     key={type.name}
                     className="rounded-xl p-3 sm:p-4"
-                    style={{ backgroundColor: "#f5f5f3" }}
+                    style={{ backgroundColor: "#f4f4f5" }}
                   >
                     <span
                       className="text-[11px]"
@@ -360,7 +360,7 @@ export function ResultView({
 
                 <div
                   className="rounded-xl p-4 sm:p-5"
-                  style={{ backgroundColor: "#f5f5f3" }}
+                  style={{ backgroundColor: "#f4f4f5" }}
                 >
                   <div className="grid grid-cols-2 gap-2 text-xs font-semibold sm:gap-3">
                     <button
@@ -402,7 +402,7 @@ export function ResultView({
 
                 <div
                   className="rounded-xl p-4 sm:p-5"
-                  style={{ backgroundColor: "#f5f5f3" }}
+                  style={{ backgroundColor: "#f4f4f5" }}
                 >
                   <div
                     className="flex items-center gap-3 rounded-lg px-4 py-3"
@@ -418,7 +418,7 @@ export function ResultView({
 
                 <div
                   className="rounded-xl p-4 sm:p-6"
-                  style={{ backgroundColor: "#f5f5f3" }}
+                  style={{ backgroundColor: "#f4f4f5" }}
                 >
                   <div className="space-y-2">
                     {["100%", "100%", "82%", "100%", "88%"].map(
@@ -439,7 +439,7 @@ export function ResultView({
 
                 <div
                   className="flex items-center justify-center rounded-xl p-4 sm:p-5"
-                  style={{ backgroundColor: "#f5f5f3" }}
+                  style={{ backgroundColor: "#f4f4f5" }}
                 >
                   <div className="flex flex-wrap gap-3">
                     {navIcons.map(({ name, Icon }, index) => (
@@ -463,7 +463,7 @@ export function ResultView({
 
                 <div
                   className="flex items-center justify-center rounded-xl p-4 sm:p-5"
-                  style={{ backgroundColor: "#f5f5f3" }}
+                  style={{ backgroundColor: "#f4f4f5" }}
                 >
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -483,7 +483,7 @@ export function ResultView({
 
                 <div
                   className="flex items-center justify-center rounded-xl p-4 sm:p-5"
-                  style={{ backgroundColor: "#f5f5f3" }}
+                  style={{ backgroundColor: "#f4f4f5" }}
                 >
                   <div className="flex flex-wrap gap-2">
                     {utilityIcons.map(({ name, Icon }, index) => (
