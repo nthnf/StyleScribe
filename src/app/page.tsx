@@ -50,7 +50,7 @@ export default function Home() {
           return;
         }
 
-        const data = (await response.json()) as { status?: typeof status; error?: string; progress?: number };
+        const data = (await response.json()) as { status?: typeof status; error?: string };
         if (cancelled) return;
 
         const nextStatus = data.status ?? "idle";
