@@ -59,19 +59,17 @@ async function persistRequestState(state: RequestState) {
 
 async function loadRequestState(id: string) {
   const cached = requests.get(id);
-  if (cached) return cached;
-
-  if (!requestRedis) return undefined;
+  if (!requestRedis) return cached;
 
   try {
     const raw = await requestRedis.get<string | RequestState>(requestKey(id));
-    if (!raw) return undefined;
+    if (!raw) return cached;
 
     const parsed = typeof raw === "string" ? (JSON.parse(raw) as RequestState) : raw;
     requests.set(id, parsed);
     return parsed;
   } catch {
-    return undefined;
+    return cached;
   }
 }
 
