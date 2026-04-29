@@ -64,10 +64,10 @@ async function loadRequestState(id: string) {
   if (!requestRedis) return undefined;
 
   try {
-    const raw = await requestRedis.get<string>(requestKey(id));
+    const raw = await requestRedis.get<string | RequestState>(requestKey(id));
     if (!raw) return undefined;
 
-    const parsed = JSON.parse(raw) as RequestState;
+    const parsed = typeof raw === "string" ? (JSON.parse(raw) as RequestState) : raw;
     requests.set(id, parsed);
     return parsed;
   } catch {
@@ -93,7 +93,7 @@ export function updateRequestState(id: string, patch: Partial<RequestState>) {
   void persistRequestState(next);
 }
 
-export function createRequest(sourceUrl: string) {
+export async function createRequest(sourceUrl: string) {
   const id = crypto.randomUUID();
   const now = Date.now();
   const state: RequestState = {
@@ -107,7 +107,7 @@ export function createRequest(sourceUrl: string) {
   };
 
   requests.set(id, state);
-  void persistRequestState(state);
+  await persistRequestState(state);
 
   return state;
 }

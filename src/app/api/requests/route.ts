@@ -31,7 +31,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Rate limit unavailable." }, { status: 503 });
   }
 
-  const state = createRequest(canonicalUrl);
+  const state = await createRequest(canonicalUrl);
   void runRequestPipeline(state.id);
 
   return NextResponse.json({ requestId: state.id, status: state.status });

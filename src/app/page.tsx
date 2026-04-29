@@ -100,6 +100,7 @@ export default function Home() {
     setError("");
     setIsRunning(true);
     setActiveStep(0);
+    setRequestId(null);
     setStatus("queued");
 
     const response = await fetch("/api/requests", {
@@ -113,6 +114,7 @@ export default function Home() {
 
       setError(data?.error ?? "Failed to create request.");
       setIsRunning(false);
+      setStatus("idle");
       return;
     }
 
