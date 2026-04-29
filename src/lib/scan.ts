@@ -77,7 +77,15 @@ export { LIMITS } from "./scan/crawl";
 export type { DesignEvidence } from "./scan/types";
 
 export async function extractDesignEvidence(startUrl: string, onProgress?: (progress: number) => void) {
+  const extractionStartedAt = Date.now();
+
+  console.info("[design-pipeline] extracting: crawl start", { sourceUrl: startUrl });
   const pages = await crawlDesignPages(startUrl);
+  console.info("[design-pipeline] extracting: crawl done", {
+    sourceUrl: startUrl,
+    pages: pages.length,
+    durationMs: Date.now() - extractionStartedAt,
+  });
   const aggregate = {
     colors: new Map<string, { value: string; count: number; properties: Set<string>; selectors: Set<string> }>(),
     fonts: new Map<string, { family: string; count: number; selectors: Set<string> }>(),
@@ -148,9 +156,24 @@ export async function extractDesignEvidence(startUrl: string, onProgress?: (prog
 
   for (const page of pages) {
     onProgress?.(20 + Math.min(15, pagesScanned.length * 3));
+    const pageStartedAt = Date.now();
+    console.info("[design-pipeline] extracting: page start", {
+      sourceUrl: startUrl,
+      pageUrl: page.url,
+      pageIndex: pagesScanned.length + 1,
+      totalPages: pages.length,
+    });
     const facts = extractHtmlFacts(page.html, page.url);
     htmlBytesRead += Buffer.byteLength(page.html, "utf8");
     pagesScanned.push(page.url);
+    console.info("[design-pipeline] extracting: html facts done", {
+      sourceUrl: startUrl,
+      pageUrl: page.url,
+      stylesheets: facts.stylesheets.length,
+      inlineStyles: facts.inlineStyles.length,
+      classAttributes: facts.classAttributes.length,
+      durationMs: Date.now() - pageStartedAt,
+    });
 
     pageDetails.push({
       url: page.url,
@@ -189,17 +212,59 @@ export async function extractDesignEvidence(startUrl: string, onProgress?: (prog
       if (!isSafePublicUrl(cssUrl)) continue;
 
       try {
+        const cssStartedAt = Date.now();
+        console.info("[design-pipeline] extracting: css fetch start", {
+          sourceUrl: startUrl,
+          pageUrl: page.url,
+          cssUrl,
+        });
         const remainingCssBytes = LIMITS.maxCssBytesTotal - cssBytesRead;
         const cssChunk = await fetchCssLimited(cssUrl, remainingCssBytes);
-        if (!cssChunk) continue;
+        if (!cssChunk) {
+          console.info("[design-pipeline] extracting: css fetch empty", {
+            sourceUrl: startUrl,
+            pageUrl: page.url,
+            cssUrl,
+            durationMs: Date.now() - cssStartedAt,
+          });
+          continue;
+        }
 
         cssBytesRead += Buffer.byteLength(cssChunk, "utf8");
         ingestParsedCss(parseCssFacts(cssChunk), facts.classAttributes);
+        console.info("[design-pipeline] extracting: css fetch done", {
+          sourceUrl: startUrl,
+          pageUrl: page.url,
+          cssUrl,
+          bytes: Buffer.byteLength(cssChunk, "utf8"),
+          totalCssBytes: cssBytesRead,
+          durationMs: Date.now() - cssStartedAt,
+        });
       } catch {
+        console.info("[design-pipeline] extracting: css fetch failed", {
+          sourceUrl: startUrl,
+          pageUrl: page.url,
+          cssUrl,
+        });
         continue;
       }
     }
+    console.info("[design-pipeline] extracting: page done", {
+      sourceUrl: startUrl,
+      pageUrl: page.url,
+      durationMs: Date.now() - pageStartedAt,
+    });
   }
+
+  console.info("[design-pipeline] extracting: done", {
+    sourceUrl: startUrl,
+    pagesScanned: pagesScanned.length,
+    colorsFound: aggregate.colors.size,
+    fontsFound: aggregate.fonts.size,
+    cssBytesRead,
+    htmlBytesRead,
+    durationMs: Date.now() - extractionStartedAt,
+  });
 
   return {
     sourceUrl: startUrl,
