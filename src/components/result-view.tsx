@@ -208,12 +208,6 @@ export function ResultView({
     text: preview.text,
     muted: preview.muted,
   };
-  const bentoBackground = findColor(
-    designSystem,
-    ["soft", "stone", "neutral", "surface", "canvas"],
-    preview.surface,
-  );
-
   async function copyDesignMd() {
     await navigator.clipboard.writeText(designMd);
     setCopied(true);
@@ -300,7 +294,7 @@ export function ResultView({
           >
             <section
               className="rounded-[1.25rem] p-2 sm:p-3"
-              style={{ backgroundColor: bentoBackground }}
+              style={{ backgroundColor: "#f4f4f5" }}
             >
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[240px_1fr_1fr_1fr] lg:grid-rows-3">
                 <div className="grid h-full grid-cols-2 gap-2 lg:row-span-3 lg:grid-cols-1 lg:grid-rows-4">
@@ -411,9 +405,9 @@ export function ResultView({
                   className="rounded-xl p-4 sm:p-5"
                   style={{ backgroundColor: previewShell.panel }}
                 >
-                    <div
-                      className="flex items-center gap-3 rounded-lg px-4 py-3"
-                      style={{
+                  <div
+                    className="flex items-center gap-3 rounded-lg px-4 py-3"
+                    style={{
                       backgroundColor: "rgba(255,255,255,0.55)",
                       color: previewShell.muted,
                     }}
@@ -585,7 +579,7 @@ export function ResultView({
             </section>
 
             <section className="space-y-4">
-                <div className="flex flex-wrap items-center gap-3">
+              <div className="flex flex-wrap items-center gap-3">
                 <h2 className="text-lg font-semibold uppercase tracking-wide">
                   Spacing
                 </h2>
@@ -728,7 +722,7 @@ export function ResultView({
                   className="rounded-xl p-5 sm:p-10"
                   style={{ backgroundColor: "#f4f4f5", color: "#111113" }}
                 >
-                    <div className="flex flex-wrap justify-center gap-5 text-center text-xs font-semibold text-[#9c9ca3] sm:gap-8">
+                  <div className="flex flex-wrap justify-center gap-5 text-center text-xs font-semibold text-[#9c9ca3] sm:gap-8">
                     {["Card", "Primary Button", "Focus State"].map(
                       (item, index) => (
                         <div key={item} className="space-y-3 sm:space-y-4">
@@ -762,7 +756,13 @@ export function ResultView({
                     <Check size={18} strokeWidth={2} /> Do
                   </h3>
                   <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-emerald-400/80 sm:space-y-3">
-                    {(dos.length ? dos : ["Use the strongest observed accent color.", "Keep spacing and typography consistent."]).map((item) => (
+                    {(dos.length
+                      ? dos
+                      : [
+                          "Use the strongest observed accent color.",
+                          "Keep spacing and typography consistent.",
+                        ]
+                    ).map((item) => (
                       <li key={item}>{item}</li>
                     ))}
                   </ul>
@@ -772,7 +772,13 @@ export function ResultView({
                     <X size={18} strokeWidth={2} /> Don&apos;t
                   </h3>
                   <ul className="mt-3 list-disc space-y-2 pl-5 text-sm text-red-400/80 sm:space-y-3">
-                    {(donts.length ? donts : ["Invent unsupported brand claims.", "Mix unrelated radii or shadow styles."]).map((item) => (
+                    {(donts.length
+                      ? donts
+                      : [
+                          "Invent unsupported brand claims.",
+                          "Mix unrelated radii or shadow styles.",
+                        ]
+                    ).map((item) => (
                       <li key={item}>{item}</li>
                     ))}
                   </ul>
