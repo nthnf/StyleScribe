@@ -41,7 +41,13 @@ export default function Home() {
     async function pollStatusLoop() {
       while (!cancelled) {
       try {
-        const response = await fetch(`/api/requests/${requestId}?since=${lastUpdatedAt}`, { cache: "no-store" });
+        const controller = new AbortController();
+        const timeout = window.setTimeout(() => controller.abort(), 30_000);
+        const response = await fetch(`/api/requests/${requestId}?since=${lastUpdatedAt}`, {
+          cache: "no-store",
+          signal: controller.signal,
+        });
+        window.clearTimeout(timeout);
 
         if (!response.ok) {
           if (response.status === 404) {

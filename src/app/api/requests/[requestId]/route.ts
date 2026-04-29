@@ -3,6 +3,9 @@ import { getRequestState } from "@/lib/request-store";
 
 type Params = { params: Promise<{ requestId: string }> };
 
+export const dynamic = "force-dynamic";
+export const revalidate = 0;
+
 const longPollTimeoutMs = 25_000;
 const longPollIntervalMs = 1_000;
 
