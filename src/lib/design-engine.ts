@@ -321,20 +321,48 @@ export async function runDesignPipeline(
   sourceUrl: string,
   onStage?: (status: "crawling" | "extracting" | "generating" | "validating", progress: number) => void,
 ): Promise<GenerateResponse> {
+  const validateStartedAt = Date.now();
+
   onStage?.("crawling", 10);
   onStage?.("extracting", 20);
   const evidence = await extractDesignEvidence(sourceUrl, (progress) => onStage?.("extracting", progress));
   onStage?.("generating", 35);
   let designMd = await generateInitialDesignMd(evidence);
   onStage?.("validating", 80);
+  console.info("[design-pipeline] validating: lint start", { sourceUrl });
   let lintReport = verifyDesignMd(designMd);
+  console.info("[design-pipeline] validating: lint done", {
+    sourceUrl,
+    errors: lintReport.summary.errors,
+    warnings: lintReport.summary.warnings,
+    durationMs: Date.now() - validateStartedAt,
+  });
   const repairAttempts: Array<{ attempt: number; errors: number; warnings: number }> = [];
 
   for (let attempt = 1; attempt <= LIMITS.maxRepairAttempts; attempt++) {
     if (lintReport.summary.errors === 0) break;
 
+    console.info("[design-pipeline] validating: repair start", {
+      sourceUrl,
+      attempt,
+      errors: lintReport.summary.errors,
+      warnings: lintReport.summary.warnings,
+    });
     designMd = await repairDesignMd(designMd, compactLintFindings(lintReport.findings), attempt);
+    console.info("[design-pipeline] validating: repair done", {
+      sourceUrl,
+      attempt,
+      durationMs: Date.now() - validateStartedAt,
+    });
+    console.info("[design-pipeline] validating: repair lint start", { sourceUrl, attempt });
     lintReport = normalizeLintReport(lint(designMd));
+    console.info("[design-pipeline] validating: repair lint done", {
+      sourceUrl,
+      attempt,
+      errors: lintReport.summary.errors,
+      warnings: lintReport.summary.warnings,
+      durationMs: Date.now() - validateStartedAt,
+    });
     onStage?.("validating", 80 + attempt * 5);
     repairAttempts.push({
       attempt,
@@ -343,7 +371,12 @@ export async function runDesignPipeline(
     });
   }
 
+  console.info("[design-pipeline] validating: visual preview start", { sourceUrl });
   const previewModel = await generateVisualArgs(designMd);
+  console.info("[design-pipeline] validating: visual preview done", {
+    sourceUrl,
+    durationMs: Date.now() - validateStartedAt,
+  });
 
   return {
     designMd,

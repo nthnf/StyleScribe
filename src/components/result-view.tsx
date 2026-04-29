@@ -202,7 +202,6 @@ export function ResultView({
   const dos = preview.dos ?? [];
   const donts = preview.donts ?? [];
   const previewShell = {
-    background: preview.surface,
     panel: "rgba(23, 23, 28, 0.04)",
     border: preview.border,
     text: preview.text,
@@ -287,14 +286,14 @@ export function ResultView({
           <div
             className="space-y-6 rounded-[2rem] border p-3 shadow-[0_24px_80px_rgba(23,23,28,0.08)] sm:space-y-8 sm:p-6"
             style={{
-              backgroundColor: previewShell.background,
+              backgroundColor: "#fafaf8",
               borderColor: previewShell.border,
               color: previewShell.text,
             }}
           >
             <section
               className="rounded-[1.25rem] p-2 sm:p-3"
-              style={{ backgroundColor: "#f4f4f5" }}
+              style={{ backgroundColor: "#fafaf8" }}
             >
               <div className="grid gap-2 sm:grid-cols-2 lg:grid-cols-[240px_1fr_1fr_1fr] lg:grid-rows-3">
                 <div className="grid h-full grid-cols-2 gap-2 lg:row-span-3 lg:grid-cols-1 lg:grid-rows-4">
@@ -336,7 +335,7 @@ export function ResultView({
                   <div
                     key={type.name}
                     className="rounded-xl p-3 sm:p-4"
-                    style={{ backgroundColor: previewShell.panel }}
+                    style={{ backgroundColor: "#f5f5f3" }}
                   >
                     <span
                       className="text-[11px]"
@@ -361,7 +360,7 @@ export function ResultView({
 
                 <div
                   className="rounded-xl p-4 sm:p-5"
-                  style={{ backgroundColor: previewShell.panel }}
+                  style={{ backgroundColor: "#f5f5f3" }}
                 >
                   <div className="grid grid-cols-2 gap-2 text-xs font-semibold sm:gap-3">
                     <button
@@ -403,7 +402,7 @@ export function ResultView({
 
                 <div
                   className="rounded-xl p-4 sm:p-5"
-                  style={{ backgroundColor: previewShell.panel }}
+                  style={{ backgroundColor: "#f5f5f3" }}
                 >
                   <div
                     className="flex items-center gap-3 rounded-lg px-4 py-3"
@@ -419,7 +418,7 @@ export function ResultView({
 
                 <div
                   className="rounded-xl p-4 sm:p-6"
-                  style={{ backgroundColor: previewShell.panel }}
+                  style={{ backgroundColor: "#f5f5f3" }}
                 >
                   <div className="space-y-2">
                     {["100%", "100%", "82%", "100%", "88%"].map(
@@ -440,7 +439,7 @@ export function ResultView({
 
                 <div
                   className="flex items-center justify-center rounded-xl p-4 sm:p-5"
-                  style={{ backgroundColor: previewShell.panel }}
+                  style={{ backgroundColor: "#f5f5f3" }}
                 >
                   <div className="flex flex-wrap gap-3">
                     {navIcons.map(({ name, Icon }, index) => (
@@ -464,7 +463,7 @@ export function ResultView({
 
                 <div
                   className="flex items-center justify-center rounded-xl p-4 sm:p-5"
-                  style={{ backgroundColor: previewShell.panel }}
+                  style={{ backgroundColor: "#f5f5f3" }}
                 >
                   <div className="flex flex-wrap gap-2">
                     <button
@@ -484,7 +483,7 @@ export function ResultView({
 
                 <div
                   className="flex items-center justify-center rounded-xl p-4 sm:p-5"
-                  style={{ backgroundColor: previewShell.panel }}
+                  style={{ backgroundColor: "#f5f5f3" }}
                 >
                   <div className="flex flex-wrap gap-2">
                     {utilityIcons.map(({ name, Icon }, index) => (
