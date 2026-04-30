@@ -1,8 +1,9 @@
 import { notFound } from "next/navigation";
-import { getRequestState } from "@/lib/request-store";
+import { getRequestResult, getRequestState } from "@/lib/request-store";
 import { ResultView } from "@/components/result-view";
 
 export const dynamic = "force-dynamic";
+export const maxDuration = 5;
 
 type ResultPageProps = {
   params: Promise<{ requestId: string }>;
@@ -34,7 +35,9 @@ export default async function ResultPage({ params }: ResultPageProps) {
     );
   }
 
-  if (!state.rawDesignMd || !state.previewModel) {
+  const result = await getRequestResult(requestId);
+
+  if (!result) {
     return (
       <main className="min-h-screen bg-[#f7f7f3] px-5 py-8 text-[#17171c] sm:px-8 lg:px-12">
         <section className="mx-auto max-w-4xl space-y-6 rounded-[2rem] border border-[#e5e7eb] bg-white p-6 shadow-[0_24px_80px_rgba(23,23,28,0.08)]">
@@ -58,8 +61,8 @@ export default async function ResultPage({ params }: ResultPageProps) {
 
   return (
     <ResultView
-      designMd={state.rawDesignMd}
-      designSystem={state.previewModel}
+      designMd={result.rawDesignMd}
+      designSystem={result.previewModel}
       requestId={state.id}
       sourceUrl={state.sourceUrl}
       status={state.status}

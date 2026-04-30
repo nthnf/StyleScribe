@@ -1,7 +1,16 @@
 import { NextResponse } from "next/server";
-import { createRequest, runRequestPipeline } from "@/lib/request-store";
+import { createRequest, runRequestPipeline, updateRequestState } from "@/lib/request-store";
+import { enqueueRequestPipeline } from "@/lib/qstash";
 import { canonicalizeUrl, isSafePublicUrl } from "@/lib/scan/url";
 import { checkDailyIpLimit, getClientIp } from "@/lib/rate-limit";
+
+export const maxDuration = 10;
+
+function isLocalOrigin(origin: string) {
+  const hostname = new URL(origin).hostname;
+
+  return hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+}
 
 export async function POST(request: Request) {
   const body = (await request.json().catch(() => null)) as { url?: string } | null;
@@ -31,8 +40,24 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Rate limit unavailable." }, { status: 503 });
   }
 
-  const state = await createRequest(canonicalUrl);
-  void runRequestPipeline(state.id, ip);
+  const state = await createRequest(canonicalUrl, ip);
+  if (state.status === "queued" && Date.now() - state.createdAt < 5_000) {
+    try {
+      const origin = new URL(request.url).origin;
+      if (isLocalOrigin(origin)) {
+        void runRequestPipeline(state.id);
+      } else {
+        await enqueueRequestPipeline(state.id, origin);
+      }
+    } catch (error) {
+      await updateRequestState(state.id, {
+        status: "error",
+        stage: "error",
+        progress: 100,
+        error: error instanceof Error ? error.message : "Failed to enqueue request.",
+      });
+    }
+  }
 
   return NextResponse.json({ requestId: state.id, status: state.status });
 }

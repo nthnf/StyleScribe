@@ -37,17 +37,19 @@ export default function Home() {
 
     let cancelled = false;
     let lastUpdatedAt = 0;
+    let delayMs = 1_000;
+    let staleStartedAt = Date.now();
 
     async function pollStatusLoop() {
       while (!cancelled) {
+        let timeout: number | null = null;
       try {
         const controller = new AbortController();
-        const timeout = window.setTimeout(() => controller.abort(), 30_000);
-        const response = await fetch(`/api/requests/${requestId}?since=${lastUpdatedAt}`, {
+        timeout = window.setTimeout(() => controller.abort(), 8_000);
+        const response = await fetch(`/api/requests/${requestId}`, {
           cache: "no-store",
           signal: controller.signal,
         });
-        window.clearTimeout(timeout);
 
         if (!response.ok) {
           if (response.status === 404) {
@@ -61,7 +63,13 @@ export default function Home() {
         const data = (await response.json()) as { status?: typeof status; error?: string; updatedAt?: number };
         if (cancelled) return;
 
-        lastUpdatedAt = data.updatedAt ?? lastUpdatedAt;
+        if (data.updatedAt && data.updatedAt > lastUpdatedAt) {
+          lastUpdatedAt = data.updatedAt;
+          delayMs = 1_000;
+          staleStartedAt = Date.now();
+        } else {
+          delayMs = Math.min(delayMs * 2, 15_000);
+        }
 
         const nextStatus = data.status ?? "idle";
         setStatus(nextStatus);
@@ -90,9 +98,19 @@ export default function Home() {
           setIsRunning(false);
           return;
         }
+
+        if (Date.now() - staleStartedAt > 75_000) {
+          setError("Request stalled. Please try again.");
+          setIsRunning(false);
+          return;
+        }
       } catch {
-        await new Promise((resolve) => window.setTimeout(resolve, 1200));
+        delayMs = Math.min(delayMs * 2, 15_000);
+      } finally {
+        if (timeout) window.clearTimeout(timeout);
       }
+
+      await new Promise((resolve) => window.setTimeout(resolve, delayMs));
       }
     }
 

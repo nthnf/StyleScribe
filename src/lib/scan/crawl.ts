@@ -1,17 +1,17 @@
 import * as cheerio from "cheerio";
 import { extractHtmlFacts } from "./html";
-import { canonicalizeUrl, getDesignDedupeKey, isSafePublicUrl, scoreAnchorText, scoreDesignUrl } from "./url";
+import { assertSafePublicUrlResolved, canonicalizeUrl, getDesignDedupeKey, isSafePublicUrl, scoreAnchorText, scoreDesignUrl } from "./url";
 import type { CandidateLink } from "./types";
 
 export const LIMITS = {
-  maxPages: 5,
+  maxPages: 3,
   maxDepth: 1,
   maxLinksPerPage: 40,
-  maxCssFilesPerPage: 6,
-  maxCssBytesTotal: 750_000,
+  maxCssFilesPerPage: 3,
+  maxCssBytesTotal: 450_000,
   maxHtmlBytesPerPage: 250_000,
   requestTimeoutMs: 8_000,
-  maxRepairAttempts: 3,
+  maxRepairAttempts: 2,
 } as const;
 
 export class CrawlError extends Error {
@@ -75,19 +75,44 @@ function isLikelyEmptyAppShell(html: string) {
   );
 }
 
-async function fetchHtmlLimited(url: string) {
+function requestTimeout(deadlineAt?: number) {
+  if (!deadlineAt) return LIMITS.requestTimeoutMs;
+
+  return Math.max(1_000, Math.min(LIMITS.requestTimeoutMs, deadlineAt - Date.now() - 500));
+}
+
+async function fetchHtmlLimited(url: string, deadlineAt?: number) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LIMITS.requestTimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), requestTimeout(deadlineAt));
 
   try {
     const response = await fetch(url, { signal: controller.signal });
     if (!response.ok) throw new CrawlError(`Fetch failed: ${response.status} ${response.statusText}`, response.status);
 
-    const text = await response.text();
-    const buffer = Buffer.from(text, "utf8");
+    const reader = response.body?.getReader();
+    if (!reader) return { text: "", bytes: 0 };
+
+    const chunks: Uint8Array[] = [];
+    let bytes = 0;
+
+    while (bytes < LIMITS.maxHtmlBytesPerPage) {
+      const { done, value } = await reader.read();
+      if (done || !value) break;
+
+      const remaining = LIMITS.maxHtmlBytesPerPage - bytes;
+      const chunk = value.byteLength > remaining ? value.slice(0, remaining) : value;
+      chunks.push(chunk);
+      bytes += value.byteLength;
+
+      if (value.byteLength > remaining) {
+        await reader.cancel();
+        break;
+      }
+    }
+
     return {
-      text: buffer.subarray(0, LIMITS.maxHtmlBytesPerPage).toString("utf8"),
-      bytes: buffer.length,
+      text: Buffer.concat(chunks).toString("utf8"),
+      bytes,
     };
   } finally {
     clearTimeout(timeout);
@@ -123,10 +148,10 @@ function extractCandidateLinks(html: string, pageUrl: string, rootUrl: string) {
   return Array.from(candidates.values()).sort((a, b) => b.score - a.score);
 }
 
-export async function crawlDesignPages(startUrl: string) {
+export async function crawlDesignPages(startUrl: string, options: { deadlineAt?: number } = {}) {
   const canonicalStart = canonicalizeUrl(startUrl, startUrl);
   if (!canonicalStart) throw new Error("Invalid start URL.");
-  if (!isSafePublicUrl(canonicalStart)) throw new UnsafeUrlError();
+  if (!(await assertSafePublicUrlResolved(canonicalStart))) throw new UnsafeUrlError();
 
   const visited = new Set<string>();
   const queued = new Set<string>([getDesignDedupeKey(canonicalStart)]);
@@ -135,15 +160,16 @@ export async function crawlDesignPages(startUrl: string) {
   const pages: Array<{ url: string; html: string }> = [];
 
   while (queue.length > 0 && pages.length < LIMITS.maxPages) {
+    if (options.deadlineAt && Date.now() >= options.deadlineAt) throw new Error("Request exceeded 60 second limit.");
     queue.sort((a, b) => b.score - a.score);
     const current = queue.shift()!;
     const key = getDesignDedupeKey(current.url);
     if (visited.has(key)) continue;
     visited.add(key);
 
-    if (!isSafePublicUrl(current.url)) continue;
+    if (!(await assertSafePublicUrlResolved(current.url))) continue;
 
-    const { text: html } = await fetchHtmlLimited(current.url);
+    const { text: html } = await fetchHtmlLimited(current.url, options.deadlineAt);
 
     if (isLikelyAuthPage(html)) {
       if (pages.length === 0) throw new AuthGatedError();

@@ -1,6 +1,6 @@
 import { crawlDesignPages, extractHtmlFacts, LIMITS } from "./scan/crawl";
 import { parseCssFacts } from "./scan/css";
-import { isSafePublicUrl, scoreAnchorText } from "./scan/url";
+import { assertSafePublicUrlResolved, isSafePublicUrl, scoreAnchorText } from "./scan/url";
 import type { DesignEvidence } from "./scan/types";
 
 function takeTopMajorColors(
@@ -35,9 +35,15 @@ function countSelectorUsage(selectors: string[], classAttributes: string[]) {
   return total;
 }
 
-async function fetchCssLimited(url: string, maxBytes: number) {
+function requestTimeout(deadlineAt?: number) {
+  if (!deadlineAt) return LIMITS.requestTimeoutMs;
+
+  return Math.max(1_000, Math.min(LIMITS.requestTimeoutMs, deadlineAt - Date.now() - 500));
+}
+
+async function fetchCssLimited(url: string, maxBytes: number, deadlineAt?: number) {
   const controller = new AbortController();
-  const timeout = setTimeout(() => controller.abort(), LIMITS.requestTimeoutMs);
+  const timeout = setTimeout(() => controller.abort(), requestTimeout(deadlineAt));
 
   try {
     const response = await fetch(url, { signal: controller.signal });
@@ -76,11 +82,11 @@ async function fetchCssLimited(url: string, maxBytes: number) {
 export { LIMITS } from "./scan/crawl";
 export type { DesignEvidence } from "./scan/types";
 
-export async function extractDesignEvidence(startUrl: string, onProgress?: (progress: number) => void) {
+export async function extractDesignEvidence(startUrl: string, onProgress?: (progress: number) => void, options: { deadlineAt?: number } = {}) {
   const extractionStartedAt = Date.now();
 
   console.info("[design-pipeline] extracting: crawl start", { sourceUrl: startUrl });
-  const pages = await crawlDesignPages(startUrl);
+  const pages = await crawlDesignPages(startUrl, { deadlineAt: options.deadlineAt });
   console.info("[design-pipeline] extracting: crawl done", {
     sourceUrl: startUrl,
     pages: pages.length,
@@ -102,6 +108,10 @@ export async function extractDesignEvidence(startUrl: string, onProgress?: (prog
   const componentButtons: Array<Record<string, string>> = [];
   const componentCards: Array<Record<string, string>> = [];
   const componentInputs: Array<Record<string, string>> = [];
+
+  function assertWithinDeadline() {
+    if (options.deadlineAt && Date.now() >= options.deadlineAt) throw new Error("Request exceeded 60 second limit.");
+  }
 
   function ingestParsedCss(parsed: ReturnType<typeof parseCssFacts>, classAttributes: string[]) {
     for (const color of parsed.colors) {
@@ -155,6 +165,7 @@ export async function extractDesignEvidence(startUrl: string, onProgress?: (prog
   }
 
   for (const page of pages) {
+    assertWithinDeadline();
     onProgress?.(20 + Math.min(15, pagesScanned.length * 3));
     const pageStartedAt = Date.now();
     console.info("[design-pipeline] extracting: page start", {
@@ -206,10 +217,10 @@ export async function extractDesignEvidence(startUrl: string, onProgress?: (prog
       }
     }
 
-    const stylesheetUrls = facts.stylesheets.slice(0, LIMITS.maxCssFilesPerPage);
-    for (const cssUrl of stylesheetUrls) {
-      if (cssBytesRead >= LIMITS.maxCssBytesTotal) break;
-      if (!isSafePublicUrl(cssUrl)) continue;
+    const stylesheetUrls = facts.stylesheets.slice(0, LIMITS.maxCssFilesPerPage).filter(isSafePublicUrl);
+    const cssChunks = await Promise.all(stylesheetUrls.map(async (cssUrl) => {
+      if (cssBytesRead >= LIMITS.maxCssBytesTotal) return null;
+      if (!(await assertSafePublicUrlResolved(cssUrl))) return null;
 
       try {
         const cssStartedAt = Date.now();
@@ -218,8 +229,8 @@ export async function extractDesignEvidence(startUrl: string, onProgress?: (prog
           pageUrl: page.url,
           cssUrl,
         });
-        const remainingCssBytes = LIMITS.maxCssBytesTotal - cssBytesRead;
-        const cssChunk = await fetchCssLimited(cssUrl, remainingCssBytes);
+        const remainingCssBytes = Math.max(0, Math.floor((LIMITS.maxCssBytesTotal - cssBytesRead) / Math.max(1, stylesheetUrls.length)));
+        const cssChunk = await fetchCssLimited(cssUrl, remainingCssBytes, options.deadlineAt);
         if (!cssChunk) {
           console.info("[design-pipeline] extracting: css fetch empty", {
             sourceUrl: startUrl,
@@ -227,25 +238,36 @@ export async function extractDesignEvidence(startUrl: string, onProgress?: (prog
             cssUrl,
             durationMs: Date.now() - cssStartedAt,
           });
-          continue;
+          return null;
         }
 
-        cssBytesRead += Buffer.byteLength(cssChunk, "utf8");
-        ingestParsedCss(parseCssFacts(cssChunk), facts.classAttributes);
         console.info("[design-pipeline] extracting: css fetch done", {
           sourceUrl: startUrl,
           pageUrl: page.url,
           cssUrl,
           bytes: Buffer.byteLength(cssChunk, "utf8"),
-          totalCssBytes: cssBytesRead,
           durationMs: Date.now() - cssStartedAt,
         });
+
+        return { cssUrl, cssChunk };
       } catch {
         console.info("[design-pipeline] extracting: css fetch failed", {
           sourceUrl: startUrl,
           pageUrl: page.url,
           cssUrl,
         });
+        return null;
+      }
+    }));
+
+    for (const item of cssChunks) {
+      if (!item || cssBytesRead >= LIMITS.maxCssBytesTotal) continue;
+      const remainingCssBytes = LIMITS.maxCssBytesTotal - cssBytesRead;
+      const cssChunk = Buffer.from(item.cssChunk, "utf8").subarray(0, remainingCssBytes).toString("utf8");
+      try {
+        cssBytesRead += Buffer.byteLength(cssChunk, "utf8");
+        ingestParsedCss(parseCssFacts(cssChunk), facts.classAttributes);
+      } catch {
         continue;
       }
     }

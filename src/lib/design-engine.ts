@@ -29,7 +29,7 @@ export type GenerateResponse = {
     cssBytesRead: number;
   };
   evidence: DesignEvidence;
-  previewModel?: DesignPreviewModel;
+  previewModel: DesignPreviewModel;
 };
 
 async function loadPrompt(name: string) {
@@ -219,36 +219,42 @@ export async function buildGenerationMessages(evidence: DesignEvidence) {
   };
 }
 
-async function callOpenAI(instructions: string, input: string, temperature = 0.2) {
+function remainingMs(deadlineAt?: number) {
+  if (!deadlineAt) return Number.POSITIVE_INFINITY;
+  return deadlineAt - Date.now();
+}
+
+function assertWithinDeadline(deadlineAt?: number) {
+  if (remainingMs(deadlineAt) <= 0) throw new Error("Request exceeded 60 second limit.");
+}
+
+async function callOpenAI(instructions: string, input: string, temperature = 0.2, options: { model?: string; deadlineAt?: number } = {}) {
   const key = process.env.OPENAI_API_KEY;
   if (!key) throw new Error("OPENAI_API_KEY missing");
 
   const client = new OpenAI({ apiKey: key });
-  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  assertWithinDeadline(options.deadlineAt);
 
   try {
-    const model = process.env.OPENAI_MODEL ?? "gpt-5.4-mini";
-    const response = await Promise.race([
-      client.responses.create({
+    const model = options.model ?? process.env.DEFAULT_MODEL ?? "gpt-5.4-mini";
+    const timeout = Math.max(1_000, Math.min(20_000, remainingMs(options.deadlineAt) - 500));
+    const response = await client.responses.create(
+      {
         model,
         instructions,
         input,
         temperature,
         max_output_tokens: 2048,
         service_tier: "default",
-      }),
-      new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("OpenAI timeout")), 20_000);
-      }),
-    ]);
+      },
+      { timeout },
+    );
 
     const content = response.output_text ?? "";
     if (!content.trim()) throw new Error("OpenAI returned empty content");
     return content;
   } catch (error) {
     throw error instanceof Error ? error : new Error(String(error));
-  } finally {
-    if (timeoutId) clearTimeout(timeoutId);
   }
 }
 
@@ -281,19 +287,20 @@ function normalizeDesignMdOutput(content: string) {
   return [...lines.slice(0, firstBodyIndex), "---", "", ...lines.slice(firstBodyIndex)].join("\n").trim();
 }
 
-async function generateInitialDesignMd(evidence: DesignEvidence) {
+async function generateInitialDesignMd(evidence: DesignEvidence, deadlineAt?: number) {
   const { system, user } = await buildGenerationMessages(evidence);
 
-  const content = await callOpenAI([system[0], system[1]].join("\n\n"), user, 0.2);
+  const content = await callOpenAI([system[0], system[1]].join("\n\n"), user, 0.2, { deadlineAt });
 
   if (!content.trim()) throw new Error("OpenAI returned empty content");
   return normalizeDesignMdOutput(content);
 }
 
-async function repairDesignMd(designMd: string, findings: LintFinding[], attempt: number) {
+async function repairDesignMd(designMd: string, findings: LintFinding[], attempt: number, deadlineAt?: number) {
   const repairPrompt = await loadPrompt("repair-design.md");
+  const model = process.env.LOW_MODEL ?? "gpt-5.4-nano";
 
-  const content = await callOpenAI(repairPrompt, JSON.stringify({ attempt, findings, designMd }), 0);
+  const content = await callOpenAI(repairPrompt, JSON.stringify({ attempt, findings, designMd }), 0, { model, deadlineAt });
 
   if (!content.trim()) throw new Error("OpenAI returned empty content");
   return normalizeDesignMdOutput(content);
@@ -320,14 +327,18 @@ export function verifyDesignMd(designMd: string) {
 export async function runDesignPipeline(
   sourceUrl: string,
   onStage?: (status: "crawling" | "extracting" | "generating" | "validating", progress: number) => void,
+  options: { deadlineAt?: number } = {},
 ): Promise<GenerateResponse> {
   const validateStartedAt = Date.now();
 
+  assertWithinDeadline(options.deadlineAt);
   onStage?.("crawling", 10);
   onStage?.("extracting", 20);
-  const evidence = await extractDesignEvidence(sourceUrl, (progress) => onStage?.("extracting", progress));
+  const evidence = await extractDesignEvidence(sourceUrl, (progress) => onStage?.("extracting", progress), { deadlineAt: options.deadlineAt });
+  assertWithinDeadline(options.deadlineAt);
   onStage?.("generating", 35);
-  let designMd = await generateInitialDesignMd(evidence);
+  let designMd = await generateInitialDesignMd(evidence, options.deadlineAt);
+  assertWithinDeadline(options.deadlineAt);
   onStage?.("validating", 80);
   console.info("[design-pipeline] validating: lint start", { sourceUrl });
   let lintReport = verifyDesignMd(designMd);
@@ -341,6 +352,7 @@ export async function runDesignPipeline(
 
   for (let attempt = 1; attempt <= LIMITS.maxRepairAttempts; attempt++) {
     if (lintReport.summary.errors === 0) break;
+    assertWithinDeadline(options.deadlineAt);
 
     console.info("[design-pipeline] validating: repair start", {
       sourceUrl,
@@ -348,7 +360,7 @@ export async function runDesignPipeline(
       errors: lintReport.summary.errors,
       warnings: lintReport.summary.warnings,
     });
-    designMd = await repairDesignMd(designMd, compactLintFindings(lintReport.findings), attempt);
+    designMd = await repairDesignMd(designMd, compactLintFindings(lintReport.findings), attempt, options.deadlineAt);
     console.info("[design-pipeline] validating: repair done", {
       sourceUrl,
       attempt,
@@ -373,7 +385,7 @@ export async function runDesignPipeline(
 
   const visualPreviewStartedAt = Date.now();
   console.info("[design-pipeline] validating: visual preview start", { sourceUrl });
-  const previewModel = await generateVisualArgs(designMd);
+  const previewModel = await generateVisualArgs(designMd, { deadlineAt: options.deadlineAt });
   console.info("[design-pipeline] validating: visual preview done", {
     sourceUrl,
     visualPreviewDurationMs: Date.now() - visualPreviewStartedAt,

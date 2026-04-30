@@ -1,3 +1,6 @@
+import { lookup } from "node:dns/promises";
+import { isIP } from "node:net";
+
 export function canonicalizeUrl(rawUrl: string, baseUrl: string) {
   try {
     const url = new URL(rawUrl, baseUrl);
@@ -47,6 +50,19 @@ function isPrivateIpv4(hostname: string) {
   return false;
 }
 
+function isPrivateIpv6(hostname: string) {
+  const value = hostname.replace(/^\[|\]$/g, "").toLowerCase();
+
+  return value === "::1" || value.startsWith("fc") || value.startsWith("fd") || value.startsWith("fe80:");
+}
+
+function isPrivateAddress(hostname: string) {
+  if (isIP(hostname) === 4) return isPrivateIpv4(hostname);
+  if (isIP(hostname.replace(/^\[|\]$/g, "")) === 6) return isPrivateIpv6(hostname);
+
+  return false;
+}
+
 export function isSafePublicUrl(urlString: string) {
   try {
     const url = new URL(urlString);
@@ -56,9 +72,22 @@ export function isSafePublicUrl(urlString: string) {
     if (hostname === "localhost" || hostname.endsWith(".localhost")) return false;
     if (hostname.endsWith(".local") || hostname.endsWith(".internal")) return false;
     if (hostname === "0.0.0.0" || hostname === "::1" || hostname === "[::1]") return false;
-    if (isPrivateIpv4(hostname)) return false;
+    if (isPrivateAddress(hostname)) return false;
 
     return true;
+  } catch {
+    return false;
+  }
+}
+
+export async function assertSafePublicUrlResolved(urlString: string) {
+  if (!isSafePublicUrl(urlString)) return false;
+
+  try {
+    const url = new URL(urlString);
+    const records = await lookup(url.hostname, { all: true, verbatim: true });
+
+    return records.length > 0 && records.every((record) => !isPrivateAddress(record.address));
   } catch {
     return false;
   }
