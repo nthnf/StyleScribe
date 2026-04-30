@@ -177,6 +177,12 @@ function parsePreviewFrontmatter(markdown: string): DesignPreviewModel {
   return normalizePreviewModel(system);
 }
 
+function getVisualPreviewTimeoutMs() {
+  const configured = Number.parseInt(process.env.OPENAI_VISUAL_TIMEOUT_MS ?? "", 10);
+
+  return Number.isFinite(configured) && configured > 0 ? configured : 20_000;
+}
+
 export async function generateVisualArgs(markdown: string): Promise<DesignPreviewModel> {
   const key = process.env.OPENAI_API_KEY;
   if (!key) {
@@ -186,24 +192,31 @@ export async function generateVisualArgs(markdown: string): Promise<DesignPrevie
 
   const client = new OpenAI({ apiKey: key });
   const model = process.env.OPENAI_VISUAL_MODEL ?? "gpt-5.4-nano";
+  const timeoutMs = getVisualPreviewTimeoutMs();
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
 
   try {
-    debugVisualPreview("[visual-preview:nano] request", { model, markdownLength: markdown.length });
+    debugVisualPreview("[visual-preview:nano] request", { model, markdownLength: markdown.length, timeoutMs });
 
-    const completion = await client.chat.completions.parse({
-      model,
-      messages: [
-        {
-          role: "system",
-          content:
-            "Convert the complete DESIGN.md file into compact visual args JSON for the app preview. Read the whole document, including YAML front matter and Markdown guidance. Extract colors, typography, spacing, rounded values, and concise `dos` and `donts` arrays when supported by the document. Use px as the base unit for fontSize, spacing, rounded, and letterSpacing. Convert rem/em to px using 16px = 1rem. Sort typography from largest fontSize to smallest. Sort spacing from smallest px value to largest. Keep spacing values consistent: do not mix rem and px. All schema fields are required; use empty strings for unavailable optional typography text fields. Return only data that matches the schema.",
-        },
-        { role: "user", content: markdown },
-      ],
-      response_format: zodResponseFormat(VisualArgsSchema, "visual_args"),
-      temperature: 0,
-      max_completion_tokens: 1200,
-    });
+    const completion = await Promise.race([
+      client.chat.completions.parse({
+        model,
+        messages: [
+          {
+            role: "system",
+            content:
+              "Convert the complete DESIGN.md file into compact visual args JSON for the app preview. Read the whole document, including YAML front matter and Markdown guidance. Extract colors, typography, spacing, rounded values, and concise `dos` and `donts` arrays when supported by the document. Use px as the base unit for fontSize, spacing, rounded, and letterSpacing. Convert rem/em to px using 16px = 1rem. Sort typography from largest fontSize to smallest. Sort spacing from smallest px value to largest. Keep spacing values consistent: do not mix rem and px. All schema fields are required; use empty strings for unavailable optional typography text fields. Return only data that matches the schema.",
+          },
+          { role: "user", content: markdown },
+        ],
+        response_format: zodResponseFormat(VisualArgsSchema, "visual_args"),
+        temperature: 0,
+        max_completion_tokens: 1200,
+      }),
+      new Promise<never>((_, reject) => {
+        timeoutId = setTimeout(() => reject(new Error("OpenAI visual preview timeout")), timeoutMs);
+      }),
+    ]);
 
     const parsed = completion.choices[0]?.message?.parsed;
     if (!parsed) {
@@ -229,5 +242,7 @@ export async function generateVisualArgs(markdown: string): Promise<DesignPrevie
       error instanceof Error ? error.message : String(error),
     );
     return parsePreviewFrontmatter(markdown);
+  } finally {
+    if (timeoutId) clearTimeout(timeoutId);
   }
 }

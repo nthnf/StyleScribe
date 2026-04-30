@@ -235,10 +235,10 @@ async function callOpenAI(instructions: string, input: string, temperature = 0.2
         input,
         temperature,
         max_output_tokens: 2048,
-        service_tier: "flex",
+        service_tier: "default",
       }),
       new Promise<never>((_, reject) => {
-        timeoutId = setTimeout(() => reject(new Error("OpenAI timeout")), 120_000);
+        timeoutId = setTimeout(() => reject(new Error("OpenAI timeout")), 20_000);
       }),
     ]);
 
@@ -371,10 +371,12 @@ export async function runDesignPipeline(
     });
   }
 
+  const visualPreviewStartedAt = Date.now();
   console.info("[design-pipeline] validating: visual preview start", { sourceUrl });
   const previewModel = await generateVisualArgs(designMd);
   console.info("[design-pipeline] validating: visual preview done", {
     sourceUrl,
+    visualPreviewDurationMs: Date.now() - visualPreviewStartedAt,
     durationMs: Date.now() - validateStartedAt,
   });
 

@@ -32,7 +32,7 @@ export async function POST(request: Request) {
   }
 
   const state = await createRequest(canonicalUrl);
-  void runRequestPipeline(state.id);
+  void runRequestPipeline(state.id, ip);
 
   return NextResponse.json({ requestId: state.id, status: state.status });
 }

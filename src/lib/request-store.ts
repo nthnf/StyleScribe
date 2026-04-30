@@ -1,5 +1,6 @@
 import type { DesignPreviewModel } from "./design-preview";
 import { runDesignPipeline } from "./design-engine";
+import { incrementDailyIpLimit } from "./rate-limit";
 import { AuthGatedError, CrawlError, UnsafeUrlError } from "./scan/crawl";
 import { Redis } from "@upstash/redis";
 
@@ -110,7 +111,7 @@ export async function createRequest(sourceUrl: string) {
   return state;
 }
 
-export async function runRequestPipeline(id: string) {
+export async function runRequestPipeline(id: string, clientIp?: string) {
   const state = requests.get(id);
   if (!state) return;
 
@@ -163,6 +164,17 @@ export async function runRequestPipeline(id: string) {
       repairAttempts: result.repairAttempts,
       evidenceSummary: result.evidenceSummary,
     });
+
+    if (clientIp) {
+      try {
+        await incrementDailyIpLimit(clientIp);
+      } catch (error) {
+        console.error("[rate-limit] failed to increment successful request", {
+          requestId: id,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
   } catch (error) {
     updateRequestState(id, {
       status: "error",
